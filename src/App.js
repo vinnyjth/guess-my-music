@@ -62,7 +62,7 @@ class GuessChance extends Component {
             guessLabel: "You guessed right!",
             guessCount: currentCount,
           });
-          this.props.success(this.timer.currentTime());
+          this.props.success(this.timer.currentTime(), this.state.guessText);
         } else if (currentCount === 3){
           this.props.failure();
         } else {
@@ -204,43 +204,90 @@ class AristSearch extends Component {
 class Game extends Component {
   constructor(props){
     super(props);
-    this.state = {
+    this.defaultState = {
       currentChallenge: 0,
       totalTime: 0,
       failed: false,
+      completions: [],
+      preGame: true,
     }
+    this.state = this.defaultState;
   }
 
-  success(time){
-    console.log(time);
-    const { currentChallenge, totalTime } = this.state;
-    this.setState({currentChallenge: currentChallenge + 1, totalTime: totalTime + time});
+  success(time, artistName){
+    const { currentChallenge, totalTime, completions } = this.state;
+    completions.push({ artistName, time })
+    this.setState({currentChallenge: currentChallenge + 1, totalTime: totalTime + time, completions});
   }
 
   failure(){
     this.setState({ failed: true });
   }
 
+  reset() {
+    this.setState(this.defaultState);
+  }
+
+  startGame() {
+    this.setState({ preGame: false });
+  }
+
   render(){
     const challenge = this.props.challenges[this.state.currentChallenge];
+    const completions = (
+      <ul>
+        {this.state.completions.map(({artistName, time}) => (
+          <li>{artistName} - {time} seconds </li>
+        ))}
+      </ul>
+    )
+    if (this.state.preGame){
+      return (
+        <div className="main">
+          <h1>Ready to play?</h1>
+          <p>Make sure you can hear your computer</p>
+          <p>Type the name of the artist to win. You only get 3 guesses per artist.</p>
+          <button onClick={this.startGame.bind(this)}>I'm ready</button>
+        </div>
+        )
+    }
     if (!challenge) {
       return (
-        <b>You Won in {this.state.totalTime} Seconds!!</b>
+        <div className="main">
+          <h1>You Won in {this.state.totalTime} Seconds!!</h1>
+          <p>
+            <a href={window.location.href} target="_blink">Share this challenge with your friends.</a>
+          </p>
+          <div className="row">
+            {completions}
+          </div>
+        </div>
       )
     }
     if (this.state.failed){
       return (
-        <b>You Failed. Better luck next time!</b>
+        <div className="main">
+          <h1>You Failed. Better luck next time!</h1>
+          <button onClick={this.reset.bind(this)}>Try again?</button>
+          <div className="row">
+            {completions}
+          </div>
+        </div>
       )
     }
     return (
-      <div className="row">
-        <GuessChance
-          key={challenge.videoId+challenge.artistId}
-          videoId={challenge.videoId}
-          artistId={challenge.artistId}
-          success={this.success.bind(this)}
-          failure={this.failure.bind(this)} />
+      <div className="main">
+        <div className="row">
+          <GuessChance
+            key={challenge.videoId+challenge.artistId}
+            videoId={challenge.videoId}
+            artistId={challenge.artistId}
+            success={this.success.bind(this)}
+            failure={this.failure.bind(this)} />
+        </div>
+        <div className="row">
+          {completions}
+        </div>
       </div>
     );
   }
