@@ -7,6 +7,14 @@ import './App.css';
 import '../vendor/normalize.css';
 import '../vendor/skeleton.css';
 
+
+function serialize(obj) {
+  return '?' + Object.keys(obj).reduce((a,k) => {
+    a.push(k + '=' + encodeURIComponent(obj[k]));
+    return a
+  }, []).join('&')
+}
+
 function getArtists(artistName){
   return fetch(`https://api.discogs.com/database/search?q=${artistName}&type=artist&token=FApTeGMISRjnzHTvFwSkRbjQczftmcROClieLHAS`)
     .then((response) => {
@@ -19,6 +27,24 @@ function getArtist(aristId){
     .then((response) => {
       return response.json()
     })
+}
+
+function getVideos(term){
+  const params = {
+    part: 'snippet',
+    q: term,
+    type: 'video',
+    videoEmbeddable: true,
+    key: 'AIzaSyDdJbMLU1s9b12ykYESxYOarrHLRzwQMjc',
+  }
+  return fetch(`https://content.googleapis.com/youtube/v3/search${serialize(params)}`)
+    .then((response) => {
+      return response.json();
+    })
+    .then((response) => {
+      return response.items.map(v => ({ videoId: v.id.videoId, title: v.snippet.title }))
+    })
+  // AIzaSyDdJbMLU1s9b12ykYESxYOarrHLRzwQMjc
 }
 
 function guessArtist(artistName, artistId){
@@ -82,12 +108,16 @@ class GuessChance extends Component {
     }
   }
 
+  fixVolume(event){
+    event.target.unMute();
+    event.target.setVolume(100);
+  }
   render(){
     return (
       <div>
         <Timer ref={timer => this.timer = timer}/>
         <div className="hide">
-          <YouTube videoId={this.props.videoId} opts={{playerVars: { autoplay: 1}}} />
+          <YouTube videoId={this.props.videoId} onReady={this.fixVolume} opts={{playerVars: { autoplay: 1}}} />
         </div>
         <label>Artist Name</label>
         <input type="text" value={this.state.guessText} onChange={this.handleChange.bind(this)} onKeyPress={this.handleKeyPress.bind(this)}/>
@@ -144,7 +174,7 @@ class Timer extends Component {
   }
 };
 
-class AristSearch extends Component {
+class ArtistSearch extends Component {
   constructor(props){
     super(props);
     this.state = {
@@ -194,6 +224,61 @@ class AristSearch extends Component {
               id={item.abbr}
             >
               {item.name}
+            </div>
+        )}
+
+      />
+    )
+  }
+}
+
+class YouTubeSearch extends Component {
+  constructor(props){
+    super(props);
+    this.state = {
+      videos: [],
+      value: '',
+    }
+  }
+  componentWillReceiveProps(nextProps){
+    if(nextProps.value !== this.props.value) {
+      this.setState({ value: nextProps.value });
+    }
+  }
+
+  componentWillMount(){
+    if (this.props.value) {
+      this.setState({ value: this.props.value });
+    }
+  }
+  _onChange(input) {
+    getVideos(input)
+      .then(r => this.setState({ videos: r }));
+  }
+  render () {
+    return (
+      <SearchBox
+        items={this.state.videos}
+        onChange={(e, input) => {
+          this.setState({ value: input });
+          this._onChange(input);
+        }}
+        inputProps={{
+          type: "text",
+          readOnly: this.props.readOnly,
+        }}
+        onSelect={(_value, item) => {
+          this.props.onSelect(item.videoId);
+          this.setState({ value: item.title });
+        }}
+        value={this.state.value}
+        getItemValue={(item) => item.videoId}
+        renderItem={(item, isHighlighted) => (
+            <div
+              key={item.id}
+              id={item.abbr}
+            >
+              {item.title}
             </div>
         )}
 
@@ -298,9 +383,8 @@ class YouTubeAdd extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      inputValue: '',
+      videoValue: '',
       ready: false,
-      videoReady: false,
       artist: null,
       done: false,
     };
@@ -308,7 +392,7 @@ class YouTubeAdd extends Component {
 
   componentWillMount(){
     if(this.props.videoId && this.props.artist){
-      this.setState({ inputValue: this.props.videoId, artist: this.props.artist, done: true })
+      this.setState({ videoValue: this.props.videoId, artist: this.props.artist, done: true })
     }
   }
 
@@ -316,43 +400,43 @@ class YouTubeAdd extends Component {
     this.setState({ inputValue: event.target.value });
   }
 
-  setArist(artist){
+  setArtist(artist){
     this.setState({ artist }, this.checkReady);
   }
 
-  handleVideoReady(event){
-    this.setState({ videoReady: true }, this.checkReady)
+  setVideo(videoValue){
+    this.setState({ videoValue }, this.checkReady);
   }
 
   checkReady(){
-    const ready = !!(this.state.videoReady && this.state.artist);
+    const ready = !!(this.state.videoValue && this.state.artist);
     this.setState({ ready });
   }
 
   save(){
-    const { inputValue: videoId, artist } = this.state;
+    const { videoValue: videoId, artist } = this.state;
     this.props.add({ videoId, artist });
-    this.setState({ inputValue: '', artist: null, videoReady: false, ready: false });
+    this.setState({ videoValue: '', artist: null, videoReady: false, ready: false });
   }
 
   render() {
-    const value = this.state.artist ? this.state.artist.name : '';
+    const artistValue = this.state.artist ? this.state.artist.name : '';
+    const videoValue = this.state.videoValue || '';
     return (
       <div className="row">
         <div className="one-half column">
           <label>Arist Name</label>
-          <AristSearch onSelect={this.setArist.bind(this)} readOnly={this.state.done} value={value}/>
+          <ArtistSearch onSelect={this.setArtist.bind(this)} readOnly={this.state.done} value={artistValue}/>
           <br />
           <label>YouTube ID</label>
-          <input value={this.state.inputValue} readOnly={this.state.done} type="text" onChange={this.handleChange.bind(this)} />
+          <YouTubeSearch onSelect={this.setVideo.bind(this)} readOnly={this.state.done} value={videoValue}/>
         </div>
         <div className="one-half column">
           <YouTube
-            videoId={this.state.inputValue} opts={{
+            videoId={this.state.videoValue} opts={{
               height: '195',
               width: '370',
             }}
-            onStateChange={this.handleVideoReady.bind(this)}
           />
         </div>
         { this.state.ready && !this.state.done ? (<button onClick={this.save.bind(this)}>Add to Challenge</button>) : null}
@@ -422,3 +506,5 @@ class App extends Component {
 };
 
 export default App;
+
+window.getVideos = getVideos;
