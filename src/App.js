@@ -88,6 +88,7 @@ class GuessChance extends Component {
         <div className="hide">
           <YouTube videoId={this.props.videoId} opts={{playerVars: { autoplay: 1}}} />
         </div>
+        <label>Artist Name</label>
         <input type="text" value={this.state.guessText} onChange={this.handleChange.bind(this)} onKeyPress={this.handleKeyPress.bind(this)}/>
         <button onClick={this.handleClick.bind(this)}>Guess</button>
         <p>{this.state.guessLabel}</p>
@@ -150,6 +151,17 @@ class AristSearch extends Component {
       value: '',
     }
   }
+  componentWillReceiveProps(nextProps){
+    if(nextProps.value !== this.props.value) {
+      this.setState({ value: nextProps.value });
+    }
+  }
+
+  componentWillMount(){
+    if (this.props.value) {
+      this.setState({ value: this.props.value });
+    }
+  }
   _onChange(input) {
     getArtists(input)
       .then((r) => {
@@ -165,7 +177,14 @@ class AristSearch extends Component {
           this.setState({ value: input });
           this._onChange(input);
         }}
-        onSelect={(_value, item) => this.props.onSelect(item)}
+        inputProps={{
+          type: "text",
+          readOnly: this.props.readOnly,
+        }}
+        onSelect={(_value, item) => {
+          this.props.onSelect(item);
+          this.setState({ value: item.name });
+        }}
         value={this.state.value}
         getItemValue={(item) => item.name}
         renderItem={(item, isHighlighted) => (
@@ -227,17 +246,101 @@ class Game extends Component {
   }
 }
 
+class YouTubeAdd extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      inputValue: '',
+      ready: false,
+      videoReady: false,
+      artist: null,
+      done: false,
+    };
+  }
+
+  componentWillMount(){
+    if(this.props.videoId && this.props.artist){
+      this.setState({ inputValue: this.props.videoId, artist: this.props.artist, done: true })
+    }
+  }
+
+  handleChange(event) {
+    this.setState({ inputValue: event.target.value });
+  }
+
+  setArist(artist){
+    this.setState({ artist }, this.checkReady);
+  }
+
+  handleVideoReady(event){
+    this.setState({ videoReady: true }, this.checkReady)
+  }
+
+  checkReady(){
+    const ready = !!(this.state.videoReady && this.state.artist);
+    this.setState({ ready });
+  }
+
+  save(){
+    const { inputValue: videoId, artist } = this.state;
+    this.props.add({ videoId, artist });
+    this.setState({ inputValue: '', artist: null, videoReady: false, ready: false });
+  }
+
+  render() {
+    const value = this.state.artist ? this.state.artist.name : '';
+    return (
+      <div className="row">
+        <div className="one-half column">
+          <label>Arist Name</label>
+          <AristSearch onSelect={this.setArist.bind(this)} readOnly={this.state.done} value={value}/>
+          <br />
+          <label>YouTube ID</label>
+          <input value={this.state.inputValue} readOnly={this.state.done} type="text" onChange={this.handleChange.bind(this)} />
+        </div>
+        <div className="one-half column">
+          <YouTube
+            videoId={this.state.inputValue} opts={{
+              height: '195',
+              width: '370',
+            }}
+            onStateChange={this.handleVideoReady.bind(this)}
+          />
+        </div>
+        { this.state.ready && !this.state.done ? (<button onClick={this.save.bind(this)}>Add to Challenge</button>) : null}
+      </div>
+    )
+  }
+}
+
 class CreateForm extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      challenges: []
+      challenges: [],
+      linkUrl: '',
     };
+  }
+
+  handleAdd({ artist, videoId }){
+    const { challenges } = this.state;
+    challenges.push({ artist: artist, videoId });
+    const challengesJSON = JSON.stringify(challenges.map(c => ({ vi: c.videoId, ai: c.artist.id })));
+    const linkUrl = `#${btoa(challengesJSON)}`;
+    this.setState({ challenges, linkUrl });
   }
 
   render() {
     return (
-      <AristSearch onSelect={console.log}/>
+      <div className="main">
+        <div className="container">
+          {this.state.challenges.map((c, index) => (
+            <YouTubeAdd key={index} artist={c.artist} videoId={c.videoId} add={this.handleAdd.bind(this)} />
+          ))}
+          <YouTubeAdd add={this.handleAdd.bind(this)} />
+        </div>
+        <a target="_blank" href={this.state.linkUrl}>Share This Link</a>
+      </div>
     )
   }
 }
@@ -245,11 +348,16 @@ class CreateForm extends Component {
 class App extends Component {
   constructor(props){
     super(props);
-    const challengeJson = atob(window.location.hash.substr(1));
-    const challenges = JSON.parse(challengeJson);
+    let challenges = []
+    try {
+      const challengeJson = atob(window.location.hash.substr(1));
+      challenges = JSON.parse(challengeJson).map(c => ({ videoId: c.vi, artistId: c.ai }));
+    } catch(e) {
+      console.log(e);
+    }
     this.state = {
       challenges,
-      createMode: true,
+      createMode: challenges.length === 0,
     };
   }
   render() {
