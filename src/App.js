@@ -2,6 +2,7 @@ import React, { Component } from 'react';
 import SearchBox from 'react-autocomplete';
 import YouTube from 'react-youtube';
 
+import 'whatwg-fetch';
 import './App.css';
 import '../vendor/normalize.css';
 import '../vendor/skeleton.css';
