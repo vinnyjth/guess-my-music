@@ -117,7 +117,7 @@ class GuessChance extends Component {
       <div>
         <Timer ref={timer => this.timer = timer}/>
         <div className="hide">
-          <YouTube videoId={this.props.videoId} onReady={this.fixVolume} opts={{playerVars: { autoplay: 1}}} />
+          <YouTube videoId={this.props.videoId} onReady={this.fixVolume} opts={{playerVars: { autoplay: 1, playsinline: 1}}} />
         </div>
         <label>Artist Name</label>
         <input type="text" value={this.state.guessText} onChange={this.handleChange.bind(this)} onKeyPress={this.handleKeyPress.bind(this)}/>
