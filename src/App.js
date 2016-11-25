@@ -2,6 +2,8 @@ import React, { Component } from 'react';
 import SearchBox from 'react-autocomplete';
 import YouTube from 'react-youtube';
 
+import { updateChallenge, getChallenge } from './Firebase';
+
 import 'whatwg-fetch';
 import './App.css';
 import '../vendor/normalize.css';
@@ -72,7 +74,7 @@ class GuessChance extends Component {
     this.state = {
       guessCount: 0,
       guessText: '',
-      guessLabel: 'No Guesses',
+      guessLabel: '3 Guesses Remaining',
     }
   }
 
@@ -94,7 +96,7 @@ class GuessChance extends Component {
           this.props.failure();
         } else {
           this.setState({
-            guessLabel: `${3 - currentCount} guesses left!`,
+            guessLabel: `${3 - currentCount} trys remaining!`,
             guessCount: currentCount,
             guessText: '',
           });
@@ -120,7 +122,7 @@ class GuessChance extends Component {
           <YouTube videoId={this.props.videoId} onReady={this.fixVolume} opts={{playerVars: { autoplay: 1, playsinline: 1}}} />
         </div>
         <label>Artist Name</label>
-        <input type="text" value={this.state.guessText} onChange={this.handleChange.bind(this)} onKeyPress={this.handleKeyPress.bind(this)}/>
+        <input type="text" className="guess" autoFocus="true" value={this.state.guessText} onChange={this.handleChange.bind(this)} onKeyPress={this.handleKeyPress.bind(this)}/>
         <button onClick={this.handleClick.bind(this)}>Guess</button>
         <p>{this.state.guessLabel}</p>
       </div>
@@ -181,6 +183,7 @@ class ArtistSearch extends Component {
       artists: [],
       value: '',
     }
+    this.debounceSearch = debounce((input) => this._onChange(input));
   }
   componentWillReceiveProps(nextProps){
     if(nextProps.value !== this.props.value) {
@@ -206,11 +209,12 @@ class ArtistSearch extends Component {
         items={this.state.artists}
         onChange={(e, input) => {
           this.setState({ value: input });
-          this._onChange(input);
+          this.debounceSearch(input);
         }}
         inputProps={{
           type: "text",
           readOnly: this.props.readOnly,
+          placeholder: "Search for artist . . ."
         }}
         onSelect={(_value, item) => {
           this.props.onSelect(item);
@@ -266,6 +270,7 @@ class YouTubeSearch extends Component {
         inputProps={{
           type: "text",
           readOnly: this.props.readOnly,
+          placeholder: "Search for video . . ."
         }}
         onSelect={(_value, item) => {
           this.props.onSelect(item.videoId);
@@ -372,6 +377,9 @@ class Game extends Component {
             failure={this.failure.bind(this)} />
         </div>
         <div className="row">
+          <h5>{this.state.currentChallenge} / {this.props.challenges.length - 1}</h5>
+        </div>
+        <div className="row">
           {completions}
         </div>
       </div>
@@ -451,15 +459,19 @@ class CreateForm extends Component {
     this.state = {
       challenges: [],
       linkUrl: '',
+      id: null,
     };
   }
 
   handleAdd({ artist, videoId }){
     const { challenges } = this.state;
     challenges.push({ artist: artist, videoId });
+    // ugh unify these
     const challengesJSON = JSON.stringify(challenges.map(c => ({ vi: c.videoId, ai: c.artist.id })));
+    const firebaseObj = challenges.map(c => ({ videoId: c.videoId, artistId: c.artist.id }));
     const linkUrl = `#${btoa(challengesJSON)}`;
-    this.setState({ challenges, linkUrl });
+    const { id } = updateChallenge(firebaseObj, this.state.id);
+    this.setState({ challenges, linkUrl, id });
   }
 
   render() {
@@ -480,18 +492,38 @@ class CreateForm extends Component {
 class App extends Component {
   constructor(props){
     super(props);
-    let challenges = []
-    try {
-      const challengeJson = atob(window.location.hash.substr(1));
-      challenges = JSON.parse(challengeJson).map(c => ({ videoId: c.vi, artistId: c.ai }));
-    } catch(e) {
-      console.log(e);
-    }
     this.state = {
-      challenges,
-      createMode: challenges.length === 0,
+      challenges: [],
+      createMode: true,
     };
   }
+
+  componentWillMount(){
+    if(window.location.pathname.substr(0, 4) === "/id/") {
+      const id = window.location.pathname.substr(4)
+      getChallenge(id).then((snapshot) => {
+        const challenges = snapshot.val();
+        if (challenges.length > 0){
+          this.setState({ challenges, createMode: false })
+        }
+      }).catch(err => console.log(err))
+    } else {
+      try {
+        const challengeJson = atob(window.location.hash.substr(1));
+        const challenges = JSON.parse(challengeJson).map(c => ({ videoId: c.vi, artistId: c.ai }));
+        if (challenges.length > 0){
+          this.setState({ challenges, createMode: false })
+        }
+      } catch(e) {
+        console.log(e);
+      }
+    }
+    ga('send', { //eslint-disable-line
+      hitType: 'pageview',
+      page: location.pathname
+    });
+  }
+
   render() {
     let component = (<Game challenges={this.state.challenges} />);
     if (this.state.createMode) {
@@ -506,5 +538,3 @@ class App extends Component {
 };
 
 export default App;
-
-window.getVideos = getVideos;

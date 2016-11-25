@@ -41,3 +41,7 @@ div {
 input:read-only {
   background-color: #d3d3d3 !important;
 }
+
+.guess {
+  margin: 10px;
+}
